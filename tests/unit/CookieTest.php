@@ -1,17 +1,4 @@
 <?php
-// Copyright 2004-present Facebook. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 namespace Facebook\WebDriver;
 
@@ -30,6 +17,7 @@ class CookieTest extends TestCase
         $cookie->setExpiry(1485388387);
         $cookie->setSecure(true);
         $cookie->setHttpOnly(true);
+        $cookie->setSameSite('Lax');
 
         $this->assertSame('cookieName', $cookie->getName());
         $this->assertSame('someValue', $cookie->getValue());
@@ -38,6 +26,7 @@ class CookieTest extends TestCase
         $this->assertSame(1485388387, $cookie->getExpiry());
         $this->assertTrue($cookie->isSecure());
         $this->assertTrue($cookie->isHttpOnly());
+        $this->assertSame('Lax', $cookie->getSameSite());
 
         return $cookie;
     }
@@ -57,6 +46,7 @@ class CookieTest extends TestCase
                 'expiry' => 1485388387,
                 'secure' => true,
                 'httpOnly' => true,
+                'sameSite' => 'Lax',
             ],
             $cookie->toArray()
         );
@@ -77,6 +67,7 @@ class CookieTest extends TestCase
 
         $cookie->setHttpOnly(null);
         $cookie->setPath(null);
+        $cookie->setSameSite(null);
         $cookieArray = $cookie->toArray();
 
         foreach ($cookieArray as $key => $value) {
@@ -97,6 +88,7 @@ class CookieTest extends TestCase
         $this->assertSame(1485388387, $cookie['expiry']);
         $this->assertTrue($cookie['secure']);
         $this->assertTrue($cookie['httpOnly']);
+        $this->assertSame('Lax', $cookie['sameSite']);
 
         $cookie->offsetSet('domain', 'bar.com');
         $this->assertSame('bar.com', $cookie['domain']);
@@ -135,6 +127,10 @@ class CookieTest extends TestCase
         $this->assertArrayNotHasKey('httpOnly', $cookie);
         $this->assertNull($cookie['httpOnly']);
         $this->assertNull($cookie->isHttpOnly());
+
+        $this->assertArrayNotHasKey('sameSite', $cookie);
+        $this->assertNull($cookie['sameSite']);
+        $this->assertNull($cookie->getSameSite());
     }
 
     public function testShouldBeCreatableFromAnArrayWithAllValues()
@@ -147,6 +143,7 @@ class CookieTest extends TestCase
             'expiry' => 1485388333,
             'secure' => false,
             'httpOnly' => false,
+            'sameSite' => 'Lax',
         ];
 
         $cookie = Cookie::createFromArray($sourceArray);
@@ -158,10 +155,11 @@ class CookieTest extends TestCase
         $this->assertSame(1485388333, $cookie['expiry']);
         $this->assertFalse($cookie['secure']);
         $this->assertFalse($cookie['httpOnly']);
+        $this->assertSame('Lax', $cookie['sameSite']);
     }
 
     /**
-     * @dataProvider invalidCookieProvider
+     * @dataProvider provideInvalidCookie
      * @param string $name
      * @param string $value
      * @param string $domain
@@ -185,7 +183,7 @@ class CookieTest extends TestCase
     /**
      * @return array[]
      */
-    public function invalidCookieProvider()
+    public function provideInvalidCookie()
     {
         return [
             // $name, $value, $domain, $expectedMessage

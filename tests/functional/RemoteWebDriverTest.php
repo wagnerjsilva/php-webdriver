@@ -1,17 +1,4 @@
 <?php
-// Copyright 2004-present Facebook. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 namespace Facebook\WebDriver;
 
@@ -38,8 +25,8 @@ class RemoteWebDriverTest extends WebDriverTestCase
     }
 
     /**
-     * @covers ::getCurrentURL
      * @covers ::get
+     * @covers ::getCurrentURL
      */
     public function testShouldGetCurrentUrl()
     {
@@ -56,18 +43,27 @@ class RemoteWebDriverTest extends WebDriverTestCase
         $this->driver->get($this->getTestPageUrl('index.html'));
 
         $source = $this->driver->getPageSource();
-        $this->assertContains('<h1 id="welcome">', $source);
-        $this->assertContains('Welcome to the facebook/php-webdriver testing page.', $source);
+        $this->compatAssertStringContainsString('<h1 id="welcome">', $source);
+        $this->compatAssertStringContainsString('Welcome to the php-webdriver testing page.', $source);
     }
 
     /**
      * @covers ::getSessionID
+     * @covers ::isW3cCompliant
      */
     public function testShouldGetSessionId()
     {
+        // This tests is intentionally included in another test, to not slow down build.
+        // @TODO Remove following in 2.0
+        if (self::isW3cProtocolBuild()) {
+            $this->assertTrue($this->driver->isW3cCompliant());
+        } else {
+            $this->assertFalse($this->driver->isW3cCompliant());
+        }
+
         $sessionId = $this->driver->getSessionID();
 
-        $this->assertInternalType('string', $sessionId);
+        $this->assertTrue(is_string($sessionId));
         $this->assertNotEmpty($sessionId);
     }
 
@@ -77,9 +73,13 @@ class RemoteWebDriverTest extends WebDriverTestCase
      */
     public function testShouldGetAllSessions()
     {
-        $sessions = RemoteWebDriver::getAllSessions($this->serverUrl);
+        if (getenv('GECKODRIVER') === '1') {
+            $this->markTestSkipped('"getAllSessions" is not supported by the W3C specification');
+        }
 
-        $this->assertInternalType('array', $sessions);
+        $sessions = RemoteWebDriver::getAllSessions($this->serverUrl, 30000);
+
+        $this->assertTrue(is_array($sessions));
         $this->assertCount(1, $sessions);
 
         $this->assertArrayHasKey('capabilities', $sessions[0]);
@@ -94,12 +94,22 @@ class RemoteWebDriverTest extends WebDriverTestCase
      */
     public function testShouldQuitAndUnsetExecutor()
     {
-        $this->assertCount(1, RemoteWebDriver::getAllSessions($this->serverUrl));
+        if (getenv('GECKODRIVER') === '1') {
+            $this->markTestSkipped('"getAllSessions" is not supported by the W3C specification');
+        }
+
+        $this->assertCount(
+            1,
+            RemoteWebDriver::getAllSessions($this->serverUrl, 30000)
+        );
         $this->assertInstanceOf(HttpCommandExecutor::class, $this->driver->getCommandExecutor());
 
         $this->driver->quit();
 
-        $this->assertCount(0, RemoteWebDriver::getAllSessions($this->serverUrl));
+        $this->assertCount(
+            0,
+            RemoteWebDriver::getAllSessions($this->serverUrl, 30000)
+        );
         $this->assertNull($this->driver->getCommandExecutor());
     }
 
@@ -114,7 +124,7 @@ class RemoteWebDriverTest extends WebDriverTestCase
         $windowHandle = $this->driver->getWindowHandle();
         $windowHandles = $this->driver->getWindowHandles();
 
-        $this->assertInternalType('string', $windowHandle);
+        $this->assertTrue(is_string($windowHandle));
         $this->assertNotEmpty($windowHandle);
         $this->assertSame([$windowHandle], $windowHandles);
 
@@ -136,6 +146,8 @@ class RemoteWebDriverTest extends WebDriverTestCase
         $this->driver->get($this->getTestPageUrl('open_new_window.html'));
         $this->driver->findElement(WebDriverBy::cssSelector('a'))->click();
 
+        $this->driver->wait()->until(WebDriverExpectedCondition::numberOfWindowsToBe(2));
+
         $this->assertCount(2, $this->driver->getWindowHandles());
 
         $this->driver->close();
@@ -155,12 +167,16 @@ class RemoteWebDriverTest extends WebDriverTestCase
         $this->assertSame('Test by ID', $element->getText());
 
         $start = microtime(true);
-        $this->driver->executeScript('
+        $scriptResult = $this->driver->executeScript('
             setTimeout(
                 function(){document.getElementById("id_test").innerHTML = "Text changed by script";},
                 250
-            )');
+            );
+            return "returned value";
+            ');
         $end = microtime(true);
+
+        $this->assertSame('returned value', $scriptResult);
 
         $this->assertLessThan(250, $end - $start, 'executeScript() should not block execution');
 
@@ -183,17 +199,19 @@ class RemoteWebDriverTest extends WebDriverTestCase
         $this->assertSame('Test by ID', $element->getText());
 
         $start = microtime(true);
-        $this->driver->executeAsyncScript(
+        $scriptResult = $this->driver->executeAsyncScript(
             'var callback = arguments[arguments.length - 1];
             setTimeout(
                 function(){
                     document.getElementById("id_test").innerHTML = "Text changed by script";
-                    callback();
+                    callback("returned value");
                  },
                 250
             );'
         );
         $end = microtime(true);
+
+        $this->assertSame('returned value', $scriptResult);
 
         $this->assertGreaterThan(
             0.250,
@@ -204,6 +222,31 @@ class RemoteWebDriverTest extends WebDriverTestCase
         // The result must be immediately available, as the executeAsyncScript should block the execution until the
         // callback is called.
         $this->assertSame('Text changed by script', $element->getText());
+    }
+
+    /**
+     * @covers ::executeScript
+     * @covers ::prepareScriptArguments
+     * @group exclude-saucelabs
+     */
+    public function testShouldExecuteScriptWithParamsAndReturnValue()
+    {
+        $this->driver->manage()->timeouts()->setScriptTimeout(1);
+
+        $this->driver->get($this->getTestPageUrl('index.html'));
+
+        $element1 = $this->driver->findElement(WebDriverBy::id('id_test'));
+        $element2 = $this->driver->findElement(WebDriverBy::className('test_class'));
+
+        $scriptResult = $this->driver->executeScript(
+            'var element1 = arguments[0];
+            var element2 = arguments[1];
+            return "1: " + element1.innerText + ", 2: " + element2.innerText;
+            ',
+            [$element1, $element2]
+        );
+
+        $this->assertSame('1: Test by ID, 2: Test by Class', $scriptResult);
     }
 
     /**
@@ -223,7 +266,7 @@ class RemoteWebDriverTest extends WebDriverTestCase
         $outputPng = $this->driver->takeScreenshot();
 
         $image = imagecreatefromstring($outputPng);
-        $this->assertInternalType('resource', $image);
+        $this->assertTrue(is_resource($image));
 
         $this->assertGreaterThan(0, imagesx($image));
         $this->assertGreaterThan(0, imagesy($image));
@@ -241,18 +284,48 @@ class RemoteWebDriverTest extends WebDriverTestCase
             $this->markTestSkipped('Screenshots are not supported by HtmlUnit browser');
         }
 
-        $screenshotPath = sys_get_temp_dir() . '/selenium-screenshot.png';
+        // Intentionally save screenshot to subdirectory to tests it is being created
+        $screenshotPath = sys_get_temp_dir() . '/' . uniqid('php-webdriver-') . '/selenium-screenshot.png';
 
         $this->driver->get($this->getTestPageUrl('index.html'));
 
         $this->driver->takeScreenshot($screenshotPath);
 
         $image = imagecreatefrompng($screenshotPath);
-        $this->assertInternalType('resource', $image);
+        $this->assertTrue(is_resource($image));
 
         $this->assertGreaterThan(0, imagesx($image));
         $this->assertGreaterThan(0, imagesy($image));
 
+        // Validate expected red box is present on the screenshot
+        $this->assertSame(
+            ['red' => 255, 'green' => 0, 'blue' => 0, 'alpha' => 0],
+            imagecolorsforindex($image, imagecolorat($image, 5, 5))
+        );
+
+        // And whitespace has expected background color
+        $this->assertSame(
+            ['red' => 250, 'green' => 250, 'blue' => 255, 'alpha' => 0],
+            imagecolorsforindex($image, imagecolorat($image, 15, 5))
+        );
+
         unlink($screenshotPath);
+        rmdir(dirname($screenshotPath));
+    }
+
+    /**
+     * @covers ::getStatus
+     * @covers \Facebook\WebDriver\Remote\RemoteStatus
+     * @group exclude-saucelabs
+     * Status endpoint is not supported on Sauce Labs
+     */
+    public function testShouldGetRemoteEndStatus()
+    {
+        $status = $this->driver->getStatus();
+
+        $this->assertTrue(is_bool($status->isReady()));
+        $this->assertNotEmpty($status->getMessage());
+
+        $this->assertTrue(is_array($status->getMeta()));
     }
 }

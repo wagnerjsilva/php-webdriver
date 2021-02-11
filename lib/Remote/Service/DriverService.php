@@ -1,17 +1,4 @@
 <?php
-// Copyright 2004-present Facebook. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 namespace Facebook\WebDriver\Remote\Service;
 
@@ -84,6 +71,8 @@ class DriverService
         $this->process = $this->createProcess();
         $this->process->start();
 
+        $this->checkWasStarted($this->process);
+
         $checker = new URLChecker();
         $checker->waitUntilAvailable(20 * 1000, $this->url . '/status');
 
@@ -129,15 +118,35 @@ class DriverService
      */
     protected static function checkExecutable($executable)
     {
-        if (!is_file($executable)) {
-            throw new Exception("'$executable' is not a file.");
-        }
-
         if (!is_executable($executable)) {
-            throw new Exception("'$executable' is not executable.");
+            throw new Exception(
+                sprintf(
+                    '"%s" is not executable. Make sure the path is correct or use environment variable to specify'
+                     . 'location of the executable.',
+                    $executable
+                )
+            );
         }
 
         return $executable;
+    }
+
+    /**
+     * @param Process $process
+     */
+    protected function checkWasStarted($process)
+    {
+        usleep(10000); // wait 10ms, otherwise the asynchronous process failure may not yet be propagated
+
+        if (!$process->isRunning()) {
+            throw new Exception(
+                sprintf(
+                    'Error starting driver executable "%s": %s',
+                    $process->getCommandLine(),
+                    $process->getErrorOutput()
+                )
+            );
+        }
     }
 
     /**

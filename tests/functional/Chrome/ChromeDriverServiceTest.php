@@ -1,17 +1,4 @@
 <?php
-// Copyright 2004-present Facebook. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 namespace Facebook\WebDriver\Chrome;
 
@@ -24,61 +11,78 @@ use PHPUnit\Framework\TestCase;
  */
 class ChromeDriverServiceTest extends TestCase
 {
-    protected function setUp()
+    /** @var ChromeDriverService */
+    private $driverService;
+
+    protected function setUp(): void
     {
         if (!getenv('BROWSER_NAME') === 'chrome' || getenv('SAUCELABS') || !getenv('CHROMEDRIVER_PATH')) {
             $this->markTestSkipped('ChromeDriverServiceTest is run only when running against local chrome');
         }
     }
 
+    protected function tearDown(): void
+    {
+        if ($this->driverService !== null && $this->driverService->isRunning()) {
+            $this->driverService->stop();
+        }
+    }
+
     public function testShouldStartAndStopServiceCreatedUsingShortcutConstructor()
     {
         // The createDefaultService() method expect path to the executable to be present in the environment variable
-        putenv(ChromeDriverService::CHROME_DRIVER_EXE_PROPERTY . '=' . getenv('CHROMEDRIVER_PATH'));
+        putenv(ChromeDriverService::CHROME_DRIVER_EXECUTABLE . '=' . getenv('CHROMEDRIVER_PATH'));
 
-        $driverService = ChromeDriverService::createDefaultService();
+        $this->driverService = ChromeDriverService::createDefaultService();
 
-        $this->assertSame('http://localhost:9515', $driverService->getURL());
+        $this->assertSame('http://localhost:9515', $this->driverService->getURL());
 
-        $this->assertInstanceOf(ChromeDriverService::class, $driverService->start());
-        $this->assertTrue($driverService->isRunning());
+        $this->assertInstanceOf(ChromeDriverService::class, $this->driverService->start());
+        $this->assertTrue($this->driverService->isRunning());
 
-        $this->assertInstanceOf(ChromeDriverService::class, $driverService->start());
+        $this->assertInstanceOf(ChromeDriverService::class, $this->driverService->start());
 
-        $this->assertInstanceOf(ChromeDriverService::class, $driverService->stop());
-        $this->assertFalse($driverService->isRunning());
+        $this->assertInstanceOf(ChromeDriverService::class, $this->driverService->stop());
+        $this->assertFalse($this->driverService->isRunning());
 
-        $this->assertInstanceOf(ChromeDriverService::class, $driverService->stop());
+        $this->assertInstanceOf(ChromeDriverService::class, $this->driverService->stop());
     }
 
     public function testShouldStartAndStopServiceCreatedUsingDefaultConstructor()
     {
-        $driverService = new ChromeDriverService(getenv('CHROMEDRIVER_PATH'), 9515, ['--port=9515']);
+        $this->driverService = new ChromeDriverService(getenv('CHROMEDRIVER_PATH'), 9515, ['--port=9515']);
 
-        $this->assertSame('http://localhost:9515', $driverService->getURL());
+        $this->assertSame('http://localhost:9515', $this->driverService->getURL());
 
-        $driverService->start();
-        $this->assertTrue($driverService->isRunning());
+        $this->driverService->start();
+        $this->assertTrue($this->driverService->isRunning());
 
-        $driverService->stop();
-        $this->assertFalse($driverService->isRunning());
-    }
-
-    public function testShouldThrowExceptionIfExecutableCannotBeFound()
-    {
-        putenv(ChromeDriverService::CHROME_DRIVER_EXE_PROPERTY . '=/not/existing');
-
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('\'/not/existing\' is not a file.');
-        ChromeDriverService::createDefaultService();
+        $this->driverService->stop();
+        $this->assertFalse($this->driverService->isRunning());
     }
 
     public function testShouldThrowExceptionIfExecutableIsNotExecutable()
     {
-        putenv(ChromeDriverService::CHROME_DRIVER_EXE_PROPERTY . '=' . __FILE__);
+        putenv(ChromeDriverService::CHROME_DRIVER_EXECUTABLE . '=' . __FILE__);
 
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('is not executable');
         ChromeDriverService::createDefaultService();
+    }
+
+    public function testShouldUseDefaultExecutableIfNoneProvided()
+    {
+        // Put path where ChromeDriver was downloaded to system PATH
+        putenv('PATH=' . getenv('PATH') . ':' . dirname(getenv('CHROMEDRIVER_PATH')));
+
+        // Unset CHROME_DRIVER_EXECUTABLE so that ChromeDriverService will attempt to run the binary from system PATH
+        putenv(ChromeDriverService::CHROME_DRIVER_EXECUTABLE . '=');
+
+        $this->driverService = ChromeDriverService::createDefaultService();
+
+        $this->assertSame('http://localhost:9515', $this->driverService->getURL());
+
+        $this->assertInstanceOf(ChromeDriverService::class, $this->driverService->start());
+        $this->assertTrue($this->driverService->isRunning());
     }
 }

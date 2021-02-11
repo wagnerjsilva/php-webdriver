@@ -1,17 +1,4 @@
 <?php
-// Copyright 2004-present Facebook. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 namespace Facebook\WebDriver\Chrome;
 
@@ -29,14 +16,14 @@ class ChromeDriverTest extends TestCase
     /** @var ChromeDriver */
     protected $driver;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         if (!getenv('BROWSER_NAME') === 'chrome' || getenv('SAUCELABS') || !getenv('CHROMEDRIVER_PATH')) {
             $this->markTestSkipped('ChromeDriverServiceTest is run only when running against local chrome');
         }
     }
 
-    protected function tearDown()
+    protected function tearDown(): void
     {
         if ($this->driver instanceof RemoteWebDriver && $this->driver->getCommandExecutor() !== null) {
             $this->driver->quit();
@@ -45,16 +32,7 @@ class ChromeDriverTest extends TestCase
 
     public function testShouldStartChromeDriver()
     {
-        // The createDefaultService() method expect path to the executable to be present in the environment variable
-        putenv(ChromeDriverService::CHROME_DRIVER_EXE_PROPERTY . '=' . getenv('CHROMEDRIVER_PATH'));
-
-        // Add --no-sandbox as a workaround for Chrome crashing: https://github.com/SeleniumHQ/selenium/issues/4961
-        $chromeOptions = new ChromeOptions();
-        $chromeOptions->addArguments(['--no-sandbox']);
-        $desiredCapabilities = DesiredCapabilities::chrome();
-        $desiredCapabilities->setCapability(ChromeOptions::CAPABILITY, $chromeOptions);
-
-        $this->driver = ChromeDriver::start($desiredCapabilities);
+        $this->startChromeDriver();
 
         $this->assertInstanceOf(ChromeDriver::class, $this->driver);
         $this->assertInstanceOf(DriverCommandExecutor::class, $this->driver->getCommandExecutor());
@@ -62,7 +40,37 @@ class ChromeDriverTest extends TestCase
         $this->driver->get('http://localhost:8000/');
 
         $this->assertSame('http://localhost:8000/', $this->driver->getCurrentURL());
+    }
 
-        $this->driver->quit();
+    public function testShouldInstantiateDevTools()
+    {
+        $this->startChromeDriver();
+
+        $devTools = $this->driver->getDevTools();
+
+        $this->assertInstanceOf(ChromeDevToolsDriver::class, $devTools);
+
+        $this->driver->get('http://localhost:8000/');
+
+        $cdpResult = $devTools->execute(
+            'Runtime.evaluate',
+            ['expression' => 'window.location.toString()']
+        );
+
+        $this->assertSame(['result' => ['type' => 'string', 'value' => 'http://localhost:8000/']], $cdpResult);
+    }
+
+    private function startChromeDriver()
+    {
+        // The createDefaultService() method expect path to the executable to be present in the environment variable
+        putenv(ChromeDriverService::CHROME_DRIVER_EXECUTABLE . '=' . getenv('CHROMEDRIVER_PATH'));
+
+        // Add --no-sandbox as a workaround for Chrome crashing: https://github.com/SeleniumHQ/selenium/issues/4961
+        $chromeOptions = new ChromeOptions();
+        $chromeOptions->addArguments(['--no-sandbox', '--headless']);
+        $desiredCapabilities = DesiredCapabilities::chrome();
+        $desiredCapabilities->setCapability(ChromeOptions::CAPABILITY, $chromeOptions);
+
+        $this->driver = ChromeDriver::start($desiredCapabilities);
     }
 }

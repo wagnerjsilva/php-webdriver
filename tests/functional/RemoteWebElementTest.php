@@ -1,22 +1,11 @@
 <?php
-// Copyright 2004-present Facebook. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 namespace Facebook\WebDriver;
 
+use Facebook\WebDriver\Exception\ElementNotInteractableException;
 use Facebook\WebDriver\Exception\NoSuchElementException;
 use Facebook\WebDriver\Remote\RemoteWebElement;
+use Facebook\WebDriver\Remote\WebDriverBrowserType;
 
 /**
  * @coversDefaultClass \Facebook\WebDriver\Remote\RemoteWebElement
@@ -130,6 +119,70 @@ class RemoteWebElementTest extends WebDriverTestCase
     }
 
     /**
+     * This test checks that the workarounds in place for https://github.com/mozilla/geckodriver/issues/653 work as
+     * expected where child links can be clicked.
+     *
+     * @covers ::click
+     * @covers ::clickChildElement
+     * @group exclude-chrome
+     * @group exclude-edge
+     * @group exclude-htmlunit
+     */
+    public function testShouldClickOnBlockLevelElement()
+    {
+        self::skipForUnmatchedBrowsers(['firefox']);
+
+        $links = [
+            'a-index-plain',
+            'a-index-block-child',
+            'a-index-block-child-hidden',
+            'a-index-second-child-hidden',
+        ];
+
+        foreach ($links as $linkid) {
+            $this->driver->get($this->getTestPageUrl('gecko653.html'));
+            $linkElement = $this->driver->findElement(WebDriverBy::id($linkid));
+
+            $linkElement->click();
+            $this->assertStringContainsString('index.html', $this->driver->getCurrentUrl());
+        }
+    }
+
+    /**
+     * This test checks that the workarounds in place for https://github.com/mozilla/geckodriver/issues/653 work as
+     * expected where child links cannot be clicked, and that appropriate exceptions are thrown.
+     *
+     * @covers ::click
+     * @covers ::clickChildElement
+     * @group exclude-chrome
+     * @group exclude-edge
+     * @group exclude-htmlunit
+     */
+    public function testShouldClickNotInteractable()
+    {
+        self::skipForUnmatchedBrowsers(['firefox']);
+        self::skipForJsonWireProtocol('Broken in legacy Firefox');
+
+        $this->driver->get($this->getTestPageUrl('gecko653.html'));
+
+        $linkElement = $this->driver->findElement(WebDriverBy::id('a-index-plain-hidden'));
+        try {
+            $linkElement->click();
+            $this->fail('No exception was thrown when clicking an inaccessible link');
+        } catch (ElementNotInteractableException $e) {
+            $this->assertInstanceOf(ElementNotInteractableException::class, $e);
+        }
+
+        $linkElement = $this->driver->findElement(WebDriverBy::id('a-index-hidden-block-child'));
+        try {
+            $linkElement->click();
+            $this->fail('No exception was thrown when clicking an inaccessible link');
+        } catch (ElementNotInteractableException $e) {
+            $this->assertInstanceOf(ElementNotInteractableException::class, $e);
+        }
+    }
+
+    /**
      * @covers ::clear
      */
     public function testShouldClearFormElementText()
@@ -164,11 +217,24 @@ class RemoteWebElementTest extends WebDriverTestCase
         $input->sendKeys(' baz');
         $this->assertSame('foo bar baz', $input->getAttribute('value'));
 
+        $input->clear();
+        $input->sendKeys([WebDriverKeys::SHIFT, 'H', WebDriverKeys::NULL, 'ello']);
+        $this->assertSame('Hello', $input->getAttribute('value'));
+
         $textarea->clear();
         $textarea->sendKeys('foo bar');
         $this->assertSame('foo bar', $textarea->getAttribute('value'));
         $textarea->sendKeys(' baz');
         $this->assertSame('foo bar baz', $textarea->getAttribute('value'));
+
+        $textarea->clear();
+        $textarea->sendKeys([WebDriverKeys::SHIFT, 'H', WebDriverKeys::NULL, 'ello']);
+        $this->assertSame('Hello', $textarea->getAttribute('value'));
+
+        // Send keys as array
+        $textarea->clear();
+        $textarea->sendKeys(['bat', 1, '3', ' ', 3, '7']);
+        $this->assertSame('bat13 37', $textarea->getAttribute('value'));
     }
 
     /**
@@ -317,7 +383,7 @@ class RemoteWebElementTest extends WebDriverTestCase
 
         $childElements = $element->findElements(WebDriverBy::cssSelector('not_existing'));
 
-        $this->assertInternalType('array', $childElements);
+        $this->assertTrue(is_array($childElements));
         $this->assertCount(0, $childElements);
     }
 
@@ -329,9 +395,54 @@ class RemoteWebElementTest extends WebDriverTestCase
         $allElements = $this->driver->findElements(WebDriverBy::cssSelector('li'));
         $childElements = $element->findElements(WebDriverBy::cssSelector('li'));
 
-        $this->assertInternalType('array', $childElements);
+        $this->assertTrue(is_array($childElements));
         $this->assertCount(5, $allElements); // there should be 5 <li> elements on page
         $this->assertCount(3, $childElements); // but we should find only subelements of one <ul>
         $this->assertContainsOnlyInstancesOf(RemoteWebElement::class, $childElements);
+    }
+
+    /**
+     * @covers ::takeElementScreenshot
+     * @group exclude-saucelabs
+     */
+    public function testShouldTakeAndSaveElementScreenshot()
+    {
+        self::skipForJsonWireProtocol('Take element screenshot is only part of W3C protocol');
+
+        if (!extension_loaded('gd')) {
+            $this->markTestSkipped('GD extension must be enabled');
+        }
+        if ($this->desiredCapabilities->getBrowserName() === WebDriverBrowserType::HTMLUNIT) {
+            $this->markTestSkipped('Screenshots are not supported by HtmlUnit browser');
+        }
+
+        // Intentionally save screenshot to subdirectory to tests it is being created
+        $screenshotPath = sys_get_temp_dir() . '/' . uniqid('php-webdriver-') . '/element-screenshot.png';
+
+        $this->driver->get($this->getTestPageUrl('index.html'));
+
+        $element = $this->driver->findElement(WebDriverBy::id('red-box'));
+
+        $outputPngString = $element->takeElementScreenshot($screenshotPath);
+
+        // Assert file output
+        $imageFromFile = imagecreatefrompng($screenshotPath);
+        $this->assertEquals(5, imagesx($imageFromFile));
+        $this->assertEquals(5, imagesy($imageFromFile));
+
+        // Validate element is actually red
+        $this->assertSame(
+            ['red' => 255, 'green' => 0, 'blue' => 0, 'alpha' => 0],
+            imagecolorsforindex($imageFromFile, imagecolorat($imageFromFile, 0, 0))
+        );
+
+        // Assert string output
+        $imageFromString = imagecreatefromstring($outputPngString);
+        $this->assertTrue(is_resource($imageFromString));
+        $this->assertEquals(5, imagesx($imageFromString));
+        $this->assertEquals(5, imagesy($imageFromString));
+
+        unlink($screenshotPath);
+        rmdir(dirname($screenshotPath));
     }
 }

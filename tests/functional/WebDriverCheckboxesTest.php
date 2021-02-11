@@ -1,29 +1,17 @@
 <?php
-// Copyright 2004-present Facebook. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 namespace Facebook\WebDriver;
 
 use Facebook\WebDriver\Exception\NoSuchElementException;
 
 /**
- * @covers \Facebook\WebDriver\WebDriverCheckboxes
  * @covers \Facebook\WebDriver\AbstractWebDriverCheckboxOrRadio
+ * @covers \Facebook\WebDriver\WebDriverCheckboxes
+ * @group exclude-edge
  */
 class WebDriverCheckboxesTest extends WebDriverTestCase
 {
-    protected function setUp()
+    protected function setUp(): void
     {
         parent::setUp();
 
@@ -136,7 +124,7 @@ class WebDriverCheckboxesTest extends WebDriverTestCase
     }
 
     /**
-     * @dataProvider selectByVisibleTextDataProvider
+     * @dataProvider provideSelectByVisibleTextData
      *
      * @param string $text
      * @param string $value
@@ -153,9 +141,9 @@ class WebDriverCheckboxesTest extends WebDriverTestCase
     }
 
     /**
-     * @return array
+     * @return array[]
      */
-    public function selectByVisibleTextDataProvider()
+    public function provideSelectByVisibleTextData()
     {
         return [
             ['J 2 B', 'j2b'],
@@ -164,7 +152,7 @@ class WebDriverCheckboxesTest extends WebDriverTestCase
     }
 
     /**
-     * @dataProvider selectByVisiblePartialTextDataProvider
+     * @dataProvider provideSelectByVisiblePartialTextData
      *
      * @param string $text
      * @param string $value
@@ -181,9 +169,9 @@ class WebDriverCheckboxesTest extends WebDriverTestCase
     }
 
     /**
-     * @return array
+     * @return array[]
      */
-    public function selectByVisiblePartialTextDataProvider()
+    public function provideSelectByVisiblePartialTextData()
     {
         return [
             ['2 B', 'j2b'],

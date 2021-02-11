@@ -1,26 +1,14 @@
 <?php
-// Copyright 2004-present Facebook. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 namespace Facebook\WebDriver;
 
 use Facebook\WebDriver\Remote\RemoteWebDriver;
-use PHPUnit\Framework\BaseTestListener;
+use PHPUnit\Framework\TestListener;
+use Throwable;
 
-class ReportSauceLabsStatusListener extends BaseTestListener
+class ReportSauceLabsStatusListener implements TestListener
 {
-    public function endTest(\PHPUnit_Framework_Test $test, $time)
+    public function endTest(\PHPUnit\Framework\Test $test, float $time): void
     {
         if (!$test instanceof WebDriverTestCase || !$test->driver instanceof RemoteWebDriver) {
             return;
@@ -44,11 +32,50 @@ class ReportSauceLabsStatusListener extends BaseTestListener
         );
 
         $data = [
-            'passed' => ($testStatus === \PHPUnit_Runner_BaseTestRunner::STATUS_PASSED),
+            'passed' => ($testStatus === \PHPUnit\Runner\BaseTestRunner::STATUS_PASSED),
             'custom-data' => ['message' => $test->getStatusMessage()],
         ];
 
         $this->submitToSauceLabs($endpointUrl, $data);
+    }
+
+    public function addError(\PHPUnit\Framework\Test $test, Throwable $t, float $time): void
+    {
+    }
+
+    public function addWarning(\PHPUnit\Framework\Test $test, \PHPUnit\Framework\Warning $w, float $time): void
+    {
+    }
+
+    public function addFailure(
+        \PHPUnit\Framework\Test $test,
+        \PHPUnit\Framework\AssertionFailedError $e,
+        float $time
+    ): void {
+    }
+
+    public function addIncompleteTest(\PHPUnit\Framework\Test $test, Throwable $t, float $time): void
+    {
+    }
+
+    public function addRiskyTest(\PHPUnit\Framework\Test $test, Throwable $t, float $time): void
+    {
+    }
+
+    public function addSkippedTest(\PHPUnit\Framework\Test $test, Throwable $t, float $time): void
+    {
+    }
+
+    public function startTestSuite(\PHPUnit\Framework\TestSuite $suite): void
+    {
+    }
+
+    public function endTestSuite(\PHPUnit\Framework\TestSuite $suite): void
+    {
+    }
+
+    public function startTest(\PHPUnit\Framework\Test $test): void
+    {
     }
 
     /**
@@ -57,8 +84,8 @@ class ReportSauceLabsStatusListener extends BaseTestListener
      */
     private function testWasSkippedOrIncomplete($testStatus)
     {
-        if ($testStatus === \PHPUnit_Runner_BaseTestRunner::STATUS_SKIPPED
-            || $testStatus === \PHPUnit_Runner_BaseTestRunner::STATUS_INCOMPLETE) {
+        if ($testStatus === \PHPUnit\Runner\BaseTestRunner::STATUS_SKIPPED
+            || $testStatus === \PHPUnit\Runner\BaseTestRunner::STATUS_INCOMPLETE) {
             return true;
         }
 

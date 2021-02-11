@@ -1,33 +1,26 @@
 <?php
-// Copyright 2004-present Facebook. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 namespace Facebook\WebDriver\Chrome;
 
 use Facebook\WebDriver\Remote\DesiredCapabilities;
+use JsonSerializable;
 
 /**
  * The class manages the capabilities in ChromeDriver.
  *
  * @see https://sites.google.com/a/chromium.org/chromedriver/capabilities
  */
-class ChromeOptions
+class ChromeOptions implements JsonSerializable
 {
     /**
-     * The key of chrome options in desired capabilities.
+     * The key of chrome options desired capabilities (in legacy OSS JsonWire protocol)
+     * @todo Replace value with 'goog:chromeOptions' after JsonWire protocol support is removed
      */
     const CAPABILITY = 'chromeOptions';
+    /**
+     * The key of chrome options desired capabilities (in W3C compatible protocol)
+     */
+    const CAPABILITY_W3C = 'goog:chromeOptions';
     /**
      * @var array
      */
@@ -44,6 +37,16 @@ class ChromeOptions
      * @var array
      */
     private $experimentalOptions = [];
+
+    /**
+     * Return a version of the class which can JSON serialized.
+     *
+     * @return array
+     */
+    public function jsonSerialize()
+    {
+        return $this->toArray();
+    }
 
     /**
      * Sets the path of the Chrome executable. The path should be either absolute
@@ -125,23 +128,25 @@ class ChromeOptions
     }
 
     /**
-     * @return array
+     * @return \ArrayObject|array
      */
     public function toArray()
     {
-        $options = $this->experimentalOptions;
-
         // The selenium server expects a 'dictionary' instead of a 'list' when
         // reading the chrome option. However, an empty array in PHP will be
-        // converted to a 'list' instead of a 'dictionary'. To fix it, we always
-        // set the 'binary' to avoid returning an empty array.
-        $options['binary'] = $this->binary;
+        // converted to a 'list' instead of a 'dictionary'. To fix it, we work
+        // with `ArrayObject`
+        $options = new \ArrayObject($this->experimentalOptions);
 
-        if ($this->arguments) {
+        if (!empty($this->binary)) {
+            $options['binary'] = $this->binary;
+        }
+
+        if (!empty($this->arguments)) {
             $options['args'] = $this->arguments;
         }
 
-        if ($this->extensions) {
+        if (!empty($this->extensions)) {
             $options['extensions'] = $this->extensions;
         }
 
